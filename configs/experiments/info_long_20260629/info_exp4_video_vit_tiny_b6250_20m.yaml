@@ -1,0 +1,184 @@
+run_id: info-exp4-video-source20m-vit-tiny-b6250-warmup160-20m-20260629
+output_dir: /scratch-shared/vnechita/Master-Thesis/results/info-exp4-video-source20m-vit-tiny-b6250-warmup160-20m-20260629
+seed: 1729
+wandb:
+  enabled: true
+  project: up-images-vit-info-long-20260629
+  id: info-exp4-video-source20m-vit-tiny-b6250-warmup160-20m-20260629
+  name: info-exp4-video-source20m-vit-tiny-b6250-warmup160-20m-20260629
+  group: info_exp2_3_10m_exp4_5_20m_20260629
+  notes: Fresh 20M exp4 run using the same video source and train hyperparameters as W&B run video_20m_all_datasets_vit_tiny_b6250_20260615,
+    with cls_mean-only frozen embeddings.
+  tags:
+  - info_txt
+  - experiment_4
+  - vit_tiny
+  - 20m
+  - cls_mean_only
+  - video
+  - real_video
+  - b6250
+  - source_video_20m
+  - warmup160
+  - fresh_20m
+model:
+  name: vit_tiny_patch16_224
+  image_size: 224
+  patch_size: 16
+mae:
+  mask_ratio: 0.75
+  decoder_embed_dim: 96
+  decoder_depth: 2
+  decoder_num_heads: 3
+source:
+  type: real
+  params:
+    name: video
+    path: data/video/Walking_in_Amsterdam_640x360_60fps.mp4
+    buffer_size: 10000
+    refresh_fraction: 0.125
+    refresh_every: 32
+    sample_fps: 2.0
+    reseek_every: 512
+    buffer_shorter_size: 256
+    horizontal_flip_prob: 0.5
+    color_jitter_strength: 0.2
+    random_grayscale_prob: 0.05
+    temporal_jitter: true
+    crop_scale:
+    - 0.55
+    - 1.0
+    crop_ratio:
+    - 0.75
+    - 1.3333333333333333
+train:
+  target_instances: 20000000
+  batch_size: 6250
+  lr: 0.0001
+  min_lr: 0.0
+  warmup_steps: 160
+  weight_decay: 0.05
+  betas:
+  - 0.9
+  - 0.95
+  amp: true
+  clip_grad: 1.0
+  log_every: 5
+  val_every: 0
+  validation_interval_instances: 0
+  val_batches: 0
+  checkpoint_every: 160
+  preview_every: 160
+eval:
+  image_size: 224
+  batch_size: 512
+  num_workers: 8
+  embedding_modes:
+  - cls_mean
+  probes:
+  - linear
+  linear_epochs: 30
+  linear_batch_size: 8192
+  linear_lr: 0.1
+  linear_weight_decay: 0.0001
+  linear_optimizer: torch.optim.SGD
+  linear_momentum: 0.9
+  linear_loss: cross_entropy
+  linear_device: cuda
+  reconstruction_mae: true
+datasets:
+- name: cifar10
+  root: data/cifar10
+  cache_root: data/cache
+  transform_policy: full_resize
+  eval_batch_size: 512
+  eval_num_workers: 8
+- name: cifar100
+  root: data/cifar100
+  cache_root: data/cache
+  transform_policy: full_resize
+  eval_batch_size: 512
+  eval_num_workers: 8
+- name: tiny_imagenet
+  path: data/tiny-imagenet-200
+  train_split: train
+  eval_split: test
+  cache_root: data/cache
+  transform_policy: full_resize
+  eval_batch_size: 512
+  eval_num_workers: 8
+- name: imagenet1k
+  root: data/imagenet
+  eval_split: test
+  cache_root: data/cache
+  transform_policy: center_crop
+  eval_batch_size: 128
+  eval_num_workers: 0
+- name: imagenet_r
+  train_path: data/imagenet
+  eval_path: data/imagenet-r
+  eval_split: test
+  cache_root: data/cache
+  transform_policy: center_crop
+  eval_batch_size: 128
+  eval_num_workers: 0
+- name: food101
+  root: data/food101
+  cache_root: data/cache
+  transform_policy: center_crop
+  eval_batch_size: 512
+  eval_num_workers: 8
+- name: pets
+  root: data/pets
+  cache_root: data/cache
+  transform_policy: center_crop
+  eval_batch_size: 512
+  eval_num_workers: 8
+- name: cars
+  path: data/stanford-cars
+  train_split: train
+  eval_split: test
+  cache_root: data/cache
+  transform_policy: center_crop
+  eval_batch_size: 512
+  eval_num_workers: 8
+- name: dtd
+  root: data/dtd
+  cache_root: data/cache
+  transform_policy: center_crop
+  eval_batch_size: 512
+  eval_num_workers: 8
+- name: eurosat
+  root: data/eurosat
+  cache_root: data/cache
+  transform_policy: full_resize
+  eval_batch_size: 512
+  eval_num_workers: 8
+- name: shape_color_objects
+  cache_root: data/cache
+  eval_batch_size: 512
+  eval_num_workers: 8
+- name: line_field_orientation
+  cache_root: data/cache
+  eval_batch_size: 512
+  eval_num_workers: 8
+- name: texture_mosaic
+  cache_root: data/cache
+  eval_batch_size: 512
+  eval_num_workers: 8
+- name: checker_grid_field
+  cache_root: data/cache
+  eval_batch_size: 512
+  eval_num_workers: 8
+- name: resisc45
+  path: data/resisc45
+  cache_root: data/cache
+  transform_policy: full_resize
+  eval_batch_size: 512
+  eval_num_workers: 8
+- name: sun397
+  path: data/sun397
+  cache_root: data/cache
+  transform_policy: center_crop
+  eval_batch_size: 512
+  eval_num_workers: 8

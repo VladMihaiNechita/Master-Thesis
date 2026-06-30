@@ -1,0 +1,60 @@
+run_id: local_smoke_irc_vit_tiny_224
+output_dir: results/local_smoke_irc_vit_tiny_224
+seed: 1729
+wandb:
+  enabled: false
+  project: up-images-vit
+model:
+  name: vit_tiny_patch16_224
+  image_size: 224
+  patch_size: 16
+mae:
+  mask_ratio: 0.75
+  decoder_embed_dim: 96
+  decoder_depth: 2
+  decoder_num_heads: 3
+source:
+  type: generator
+  generator:
+    name: irc_conv
+    params:
+      buffer_size: 128
+train:
+  steps: 4
+  batch_size: 4
+  lr: 0.0001
+  min_lr: 0.0
+  warmup_steps: 1
+  weight_decay: 0.05
+  betas:
+  - 0.9
+  - 0.95
+  amp: true
+  clip_grad: 1.0
+  log_every: 1
+  val_every: 2
+  val_batches: 1
+  checkpoint_every: 0
+  preview_every: 2
+eval:
+  image_size: 224
+  batch_size: 32
+  num_workers: 0
+  embedding_modes:
+  - cls_mean
+  probes:
+  - linear
+  linear_epochs: 30
+  linear_batch_size: 8192
+  linear_lr: 0.1
+  linear_weight_decay: 0.0001
+  linear_optimizer: torch.optim.SGD
+  linear_momentum: 0.9
+  linear_loss: cross_entropy
+  linear_device: auto
+  reconstruction_mae: true
+datasets:
+- name: cifar10
+  root: data/cifar10
+  cache_root: data/cache
+  transform_policy: full_resize

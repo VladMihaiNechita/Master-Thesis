@@ -1,0 +1,181 @@
+run_id: exp5v0-base-irc-val10m-20260629
+output_dir: /scratch-shared/vnechita/Master-Thesis/results/exp5v0-base-irc-val10m-20260629
+seed: 1729
+wandb:
+  enabled: true
+  project: up-images-vit-exp5-val-sweep-20260629
+  id: exp5v0-base-irc-val10m-20260629
+  name: exp5v0-base-irc-val10m-20260629
+  group: exp5_generator_true_validation_10m_20260629
+  notes: Exact exp5 generator baseline evaluated on true validation/dev splits only.
+    Use existing exp5 checkpoints where possible; no test datasets.
+  tags:
+  - info_txt
+  - experiment_5_variant
+  - vit_tiny
+  - 10m
+  - cls_mean_only
+  - irc_conv
+  - validation_only
+  - true_dev_split
+  - no_test_datasets
+  - b1000
+  - lr75x
+  - srcseed1746
+  - generator_sweep
+  - variant_0
+  - exact_exp5_baseline
+  - baseline
+  - exact_exp5_generator
+model:
+  name: vit_tiny_patch16_224
+  image_size: 224
+  patch_size: 16
+mae:
+  mask_ratio: 0.75
+  decoder_embed_dim: 96
+  decoder_depth: 2
+  decoder_num_heads: 3
+source:
+  type: generator
+  generator:
+    name: irc_conv
+    params:
+      k: 2
+      mode: random_generator_per_batch
+      width: 16
+      depth: 3
+      buffer_size: 20000
+      refresh_fraction: 0.025
+      reset_fraction: 0.001
+      reset_fraction_after: 0.0001
+      reset_fraction_switch_images: 10000000
+      reset_fraction_schedule: linear
+      fourier_fraction: 0.05
+      fourier_fraction_after: 0.05
+      fourier_fraction_switch_images: 10000000
+      fourier_fraction_schedule: linear
+      output_fourier_fraction: 0.0
+      output_noise_fraction: 0.0
+      update_strength: 0.3
+      update_strength_after: 0.15
+      update_strength_switch_images: 10000000
+      update_strength_schedule: linear
+      quantize: true
+      horizontal_flip_prob: 0.5
+      vertical_flip_prob: 0.0
+      kernel_size: 3
+      dilation: 1
+      multi_scale: false
+      weight_std_min: 0.08
+      weight_std_max: 0.08
+      latent_pixel_channels: 0
+      latent_lowres_channels: 0
+      latent_global_channels: 0
+      spectral_latent_channels: 0
+      init_source: noise
+      init_random_color_fraction: 0.1
+      random_color_fraction: 0.005
+      random_color_fraction_after: 0.0005
+      random_color_fraction_switch_images: 10000000
+      random_color_fraction_schedule: linear
+      seed: 1746
+train:
+  target_instances: 10000000
+  batch_size: 1000
+  lr: 0.00075
+  min_lr: 0.0
+  warmup_steps: 500
+  weight_decay: 0.05
+  betas:
+  - 0.9
+  - 0.95
+  amp: true
+  clip_grad: 1.0
+  log_every: 20
+  val_every: 0
+  validation_interval_instances: 0
+  val_batches: 0
+  checkpoint_every: 1000
+  preview_every: 1000
+eval:
+  image_size: 224
+  batch_size: 512
+  num_workers: 8
+  embedding_modes:
+  - cls_mean
+  probes:
+  - linear
+  linear_epochs: 30
+  linear_batch_size: 8192
+  linear_lr: 0.1
+  linear_weight_decay: 0.0001
+  linear_optimizer: torch.optim.SGD
+  linear_momentum: 0.9
+  linear_loss: cross_entropy
+  linear_device: cuda
+  reconstruction_mae: true
+datasets:
+- name: cifar10
+  root: data/cifar10
+  cache_root: data/cache
+  transform_policy: full_resize
+  eval_batch_size: 512
+  eval_num_workers: 8
+  eval_split: val
+- name: tiny_imagenet
+  path: data/tiny-imagenet-200
+  train_split: train
+  eval_split: val
+  cache_root: data/cache
+  transform_policy: full_resize
+  eval_batch_size: 512
+  eval_num_workers: 8
+- name: food101
+  root: data/food101
+  cache_root: data/cache
+  transform_policy: center_crop
+  eval_batch_size: 512
+  eval_num_workers: 8
+  eval_split: val
+- name: pets
+  root: data/pets
+  cache_root: data/cache
+  transform_policy: center_crop
+  eval_batch_size: 512
+  eval_num_workers: 8
+  eval_split: val
+- name: dtd
+  root: data/dtd
+  cache_root: data/cache
+  transform_policy: center_crop
+  eval_batch_size: 512
+  eval_num_workers: 8
+  eval_split: val
+- name: eurosat
+  root: data/eurosat
+  cache_root: data/cache
+  transform_policy: full_resize
+  eval_batch_size: 512
+  eval_num_workers: 8
+  eval_split: val
+- name: shape_color_objects
+  cache_root: data/cache
+  eval_batch_size: 512
+  eval_num_workers: 8
+  eval_split: val
+- name: line_field_orientation
+  cache_root: data/cache
+  eval_batch_size: 512
+  eval_num_workers: 8
+  eval_split: val
+- name: texture_mosaic
+  cache_root: data/cache
+  eval_batch_size: 512
+  eval_num_workers: 8
+  eval_split: val
+- name: checker_grid_field
+  cache_root: data/cache
+  eval_batch_size: 512
+  eval_num_workers: 8
+  eval_split: val

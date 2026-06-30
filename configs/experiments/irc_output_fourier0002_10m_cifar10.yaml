@@ -1,0 +1,161 @@
+run_id: 10m-cifar10-ircopt-output-fourier0002-vit_tiny-b1000-20260615
+output_dir: /scratch-shared/vnechita/Master-Thesis/results/10m-cifar10-ircopt-output-fourier0002-vit_tiny-b1000-20260615
+seed: 1729
+wandb:
+  enabled: true
+  project: up-images-vit
+  id: 10m-cifar10-ircopt-output-fourier0002-vit_tiny-b1000-20260615
+  name: 10m-cifar10-ircopt-output-fourier0002-vit_tiny-b1000-20260615
+  group: irc_conv_optimization
+  tags:
+  - irc_conv
+  - all_datasets
+  - vit_tiny
+  - 10m
+  - output_fourier
+model:
+  name: vit_tiny_patch16_224
+  image_size: 224
+  patch_size: 16
+mae:
+  mask_ratio: 0.75
+  decoder_embed_dim: 96
+  decoder_depth: 2
+  decoder_num_heads: 3
+source:
+  type: generator
+  generator:
+    name: irc_conv
+    params:
+      k: 2
+      mode: random_generator_per_batch
+      width: 16
+      depth: 3
+      buffer_size: 10000
+      refresh_fraction: 0.05
+      reset_fraction: 0.001
+      fourier_fraction: 0.0
+      fourier_fraction_after: 0.0
+      fourier_fraction_switch_step: 5000
+      output_fourier_fraction: 0.002
+      output_noise_fraction: 0.0
+      update_strength: 0.3
+      quantize: true
+      horizontal_flip_prob: 0.5
+      init_source: noise
+      seed: 1729
+train:
+  target_instances: 10000000
+  batch_size: 1000
+  lr: 0.0001
+  min_lr: 0.0
+  warmup_steps: 500
+  weight_decay: 0.05
+  betas:
+  - 0.9
+  - 0.95
+  amp: true
+  clip_grad: 1.0
+  log_every: 20
+  val_every: 0
+  validation_interval_instances: 1000000
+  val_batches: 4
+  checkpoint_every: 1000
+  preview_every: 0
+eval:
+  image_size: 224
+  batch_size: 512
+  num_workers: 4
+  embedding_modes:
+  - cls_mean
+  probes:
+  - linear
+  reconstruction_mae: true
+  linear_epochs: 30
+  linear_batch_size: 8192
+  linear_lr: 0.1
+  linear_weight_decay: 0.0001
+  linear_optimizer: torch.optim.SGD
+  linear_momentum: 0.9
+  linear_loss: cross_entropy
+  linear_device: cuda
+datasets:
+- name: cifar10
+  root: data/cifar10
+  cache_root: data/cache
+  transform_policy: full_resize
+  eval_batch_size: 512
+  eval_num_workers: 8
+- name: cifar100
+  root: data/cifar100
+  cache_root: data/cache
+  transform_policy: full_resize
+  eval_batch_size: 512
+  eval_num_workers: 8
+- name: tiny_imagenet
+  path: data/tiny-imagenet-200
+  train_split: train
+  eval_split: test
+  cache_root: data/cache
+  transform_policy: full_resize
+  eval_batch_size: 512
+  eval_num_workers: 8
+- name: imagenet1k
+  root: data/imagenet
+  eval_split: test
+  cache_root: data/cache
+  transform_policy: center_crop
+  eval_batch_size: 128
+  eval_num_workers: 0
+- name: imagenet_r
+  train_path: data/imagenet
+  eval_path: data/imagenet-r
+  eval_split: test
+  cache_root: data/cache
+  transform_policy: center_crop
+  eval_batch_size: 128
+  eval_num_workers: 0
+- name: food101
+  root: data/food101
+  cache_root: data/cache
+  transform_policy: center_crop
+  eval_batch_size: 512
+  eval_num_workers: 8
+- name: pets
+  root: data/pets
+  cache_root: data/cache
+  transform_policy: center_crop
+  eval_batch_size: 512
+  eval_num_workers: 8
+- name: cars
+  path: data/stanford-cars
+  train_split: train
+  eval_split: test
+  cache_root: data/cache
+  transform_policy: center_crop
+  eval_batch_size: 512
+  eval_num_workers: 8
+- name: dtd
+  root: data/dtd
+  cache_root: data/cache
+  transform_policy: center_crop
+  eval_batch_size: 512
+  eval_num_workers: 8
+- name: eurosat
+  root: data/eurosat
+  cache_root: data/cache
+  transform_policy: full_resize
+  eval_batch_size: 512
+  eval_num_workers: 8
+- name: resisc45
+  path: data/resisc45
+  cache_root: data/cache
+  transform_policy: full_resize
+  eval_batch_size: 512
+  eval_num_workers: 8
+- name: sun397
+  path: data/sun397
+  cache_root: data/cache
+  transform_policy: center_crop
+  eval_batch_size: 512
+  eval_num_workers: 8

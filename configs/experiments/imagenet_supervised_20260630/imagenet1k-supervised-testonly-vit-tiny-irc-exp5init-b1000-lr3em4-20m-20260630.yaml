@@ -1,0 +1,63 @@
+run_id: imagenet1k-supervised-testonly-vit-tiny-irc-exp5init-b1000-lr3em4-20m-20260630
+output_dir: /scratch-shared/vnechita/Master-Thesis/results/imagenet1k-supervised-testonly-vit-tiny-irc-exp5init-b1000-lr3em4-20m-20260630
+seed: 1729
+num_classes: 1000
+wandb:
+  enabled: true
+  project: up-images-vit-info-long-20260629
+  id: imagenet1k-supervised-testonly-vit-tiny-irc-exp5init-b1000-lr3em4-20m-20260630
+  name: imagenet1k-supervised-testonly-vit-tiny-irc-exp5init-b1000-lr3em4-20m-20260630
+  group: imagenet1k_supervised_vit_tiny_20260630
+  notes: Fixed-LR controlled supervised comparison using the cached center-crop ImageNet-1K train split, initialized from the final IRC exp5 ViT-Tiny encoder; evaluate only ImageNet-1K test at 0M and every 1M.
+  tags:
+  - imagenet1k
+  - supervised
+  - test_only
+  - vit_tiny
+  - irc_exp5_init
+  - 20m
+  - top1_top5
+model:
+  name: vit_tiny_patch16_224
+  image_size: 224
+  patch_size: 16
+init:
+  type: mae_encoder
+  checkpoint: /scratch-shared/vnechita/Master-Thesis/results/info-exp5-irc-best-clsmean-vit-tiny-b1000-lr75-src1746-20m-20260629/checkpoint_final.pt
+  strict: true
+dataset:
+  name: imagenet1k
+  root: /scratch-shared/vnechita/Master-Thesis/data/imagenet
+  train_split: train
+  eval_split: test
+  cache_root: /scratch-shared/vnechita/Master-Thesis/data_cache
+  transform_policy: center_crop
+  eval_batch_size: 512
+  eval_num_workers: 0
+train:
+  target_instances: 20000000
+  batch_size: 1000
+  lr: 0.0003
+  min_lr: 0.0
+  warmup_steps: 500
+  lr_total_steps: 20000
+  weight_decay: 0.05
+  betas:
+  - 0.9
+  - 0.999
+  amp: true
+  clip_grad: 1.0
+  log_every: 20
+  eval_interval_instances: 1000000
+  checkpoint_every_instances: 1000000
+  use_cache_stream: true
+  shuffle_shards: true
+  shuffle_within_shard: true
+  shuffle_buffer_shards: 16
+  horizontal_flip_prob: 0.5
+eval:
+  image_size: 224
+  batch_size: 512
+  num_workers: 0
+  interval_instances: 1000000
+  initial: true

@@ -1,0 +1,214 @@
+Generator overview
+==================
+
+All pretraining generators return tensors with shape [batch, 3, image_size,
+image_size]. Values are floats in [0, 1]. The common entry point is
+build_generator() in __init__.py, which reads the generator name and parameters
+from the config.
+
+Registered generators
+---------------------
+
+The defaults below match the 10M CIFAR-10 generator test configuration used for
+the current experiments.
+
+iid_rgb_noise
+
+Implemented in noise.py as IIDRGBNoise. This is the simplest baseline. Each
+pixel and RGB channel is sampled independently, either from a uniform
+distribution in [0, 1] or from a Gaussian centered around 0.5 and then clipped
+to [0, 1]. There is no spatial structure and no relationship between images.
+Default: distribution=uniform.
+
+gaussian_blur_noise
+
+Implemented in blur.py as GaussianBlurNoise. This first creates iid RGB noise
+and then applies a separable Gaussian blur with reflection padding. The result
+keeps the random color baseline but adds local spatial correlation, producing
+smoother low-level texture than pure iid noise.
+Default: sigma=2.0.
+
+fourier_texture
+
+Implemented in fourier.py as FourierTexture. Each image is built from a sum of
+random sinusoidal waves. For every component, the code samples a frequency, a
+direction, a phase, and optional per-channel amplitudes. The summed signal is
+normalized per image to [0, 1]. This creates structured global textures with
+repeated patterns and frequency content.
+Defaults: components=32, min_freq=1.0, max_freq=12.0, color_mixing=True.
+
+simple_shapes
+
+Implemented in shapes.py as SimpleShapes. Each image starts from a random solid
+background color. The generator then draws a small random number of colored
+geometric primitives: circles, squares, rotated rectangles, triangles, and
+lines. This creates simple object-like structure with foreground/background
+separation.
+Defaults: shape_count_min=1, shape_count_max=3.
+
+irc_conv
+
+Implemented in irc_conv.py as IRCConvGenerator. This is the iterated random
+computation generator. It keeps an ImageBuffer initialized from noise or simple
+shapes. On each generate() call, a random convolutional network transforms part
+of the buffer for K update steps:
+
+    x <- 0.7 * x + 0.3 * sigmoid(random_convnet(x))
+
+Optional latent channels can be concatenated to x before the random convnet:
+
+    x <- 0.7 * x + 0.3 * sigmoid(random_convnet(cat([x, z])))
+
+The latent z can contain pixel noise, low-resolution noise fields upsampled to
+image resolution, broadcast global per-image channels, and spectral random
+fields with random power-law spectra. This follows the old generator_cnn_1/2
+idea of conditioning random computation on both the previous buffer image and
+fresh latent noise, while keeping the generator dataset-agnostic and avoiding
+hand-coded object or shape priors.
+
+The refreshed images are clamped to [0, 1], optionally a small fraction of the
+buffer is reset to fresh noise, optionally a tiny fraction is replaced by fresh
+FourierTexture images, and the output batch is sampled from the buffer. With
+mode=random_generator_per_batch, a new random convnet is used for each batch.
+With mode=fixed_generator_per_run, the same random convnet is reused for the
+run. Larger K means more iterated random computation before the images are used
+for ViT pretraining.
+Defaults: k=2, mode=random_generator_per_batch, width=16, depth=3,
+kernel_size=3, dilation=1, activation=gelu, weight_std_min=0.08,
+weight_std_max=0.08, buffer_size=10000, refresh_fraction=0.05,
+refresh_fraction_after=None, refresh_fraction_switch_step=0,
+refresh_fraction_switch_images=None, refresh_fraction_schedule=step,
+reset_fraction=0.001, init_random_color_fraction=0.0,
+random_color_fraction=0.0, random_color_fraction_after=None,
+random_color_fraction_switch_step=0, random_color_fraction_switch_images=None,
+random_color_fraction_schedule=step, fourier_fraction=0.05,
+fourier_fraction_after=0.02,
+fourier_fraction_switch_step=5000, fourier_fraction_switch_images=None,
+fourier_fraction_schedule=step,
+output_fourier_fraction=0.0, output_noise_fraction=0.0, update_strength=0.3,
+update_strength_after=None, update_strength_switch_step=0,
+update_strength_switch_images=None,
+update_strength_schedule=step, reset_fraction_after=None,
+reset_fraction_switch_step=0, reset_fraction_switch_images=None,
+reset_fraction_schedule=step, k_choices=None,
+quantize=True, horizontal_flip_prob=0.5, vertical_flip_prob=0.0,
+latent_pixel_channels=0, latent_lowres_channels=0,
+latent_lowres_scales=[14, 28, 56], latent_global_channels=0,
+spectral_latent_channels=0, spectral_alpha_min=0.7,
+spectral_alpha_max=2.0, init_source=noise, seed=1729.
+These defaults match the best real IRC 10M CIFAR-10 run so far: each training
+step refreshes 500 buffer images, resets 10 images to fresh noise, injects 500
+Fourier images before step 5000 and 200 Fourier images afterward, then samples
+the requested train batch from the buffer with replacement.
+
+The optional *_after, *_switch_step, *_switch_images, and *_schedule settings
+control refresh, Fourier, reset, random-color, and update-strength schedules. If *_switch_images is
+set, schedule progress is based on the global number of pretraining images
+seen. This is the preferred unit for serious runs because it stays correct if
+batch size or GPU count changes. If *_switch_images is omitted, the generator
+falls back to the older generate-call based *_switch_step behavior.
+
+With schedule=step, the generator uses the start value until the chosen horizon
+is reached, then uses the after value. With schedule=linear, it linearly
+interpolates from the start value to the after value over the chosen horizon
+and then stays at the after value. For example, reset_fraction=0.001,
+reset_fraction_after=0.0001, reset_fraction_switch_images=10000000, and
+reset_fraction_schedule=linear means 0 images uses 0.001, 5M images uses
+0.00055, and 10M images uses 0.0001.
+
+The optional refresh_fraction schedule controls how much of the persistent
+buffer is recomputed each batch. This is useful for testing whether late
+training drift comes from too much buffer churn after the generator has already
+formed useful structure.
+
+The optional init_random_color_fraction setting replaces that fraction of the
+initial buffer with solid RGB images. Colors are sampled independently on the
+256-level image grid, giving 256^3 possible colors. The optional
+random_color_fraction schedule then injects fresh solid-color images during
+refresh, analogous to Fourier injection. This is meant as a low-frequency
+brightness/color seed rather than a hand-coded shape or object prior.
+
+The optional quantize=True setting rounds buffer images onto 256 image levels:
+
+    x <- round(255 * clamp(x, 0, 1)) / 255
+
+This mirrors the older universal-image-generator code and makes synthetic
+values match normal uint8-like image granularity. The optional
+horizontal_flip_prob applies random horizontal flips only to sampled output
+batches, leaving the persistent buffer itself unchanged.
+
+The optional vertical_flip_prob does the same for vertical flips. It is meant
+only for synthetic universal-data experiments where upside-down images are not
+semantically wrong in the same way they would be for real photo training.
+
+The optional weight_std_min and weight_std_max settings sample a random weight
+standard deviation per conv layer when a random convnet is created. Equal
+values reproduce the older fixed DEFAULT_RANDOM_CONV_WEIGHT_STD behavior.
+
+The optional latent_* and spectral_* settings control fresh latent fields for
+the update convnet. A clean Fourier-prior experiment should set
+fourier_fraction=0.0 and use spectral_latent_channels>0, so Fourier structure
+guides the hidden update without replacing persistent buffer images with full
+Fourier textures.
+
+The optional output_fourier_fraction and output_noise_fraction settings replace
+a small fraction of the returned batch with fresh FourierTexture or iid noise
+after sampling from the buffer. This gives the target model extra diversity
+without inserting those images into the persistent IRC buffer.
+
+The optional k_choices setting can be a list such as [1, 2, 3]. When provided,
+each refreshed buffer image samples one update count from that list instead of
+all refreshed images using the fixed k. The optional update_strength setting
+controls the blend
+
+    x <- (1 - update_strength) * x + update_strength * sigmoid(random_convnet(x))
+
+The default update_strength=0.3 preserves the original behavior; lower values
+such as 0.15 make each IRC step less aggressive.
+
+The optional update_rule setting controls how the squashed random-conv update
+is applied. The default blend rule preserves the original IRC equation above.
+The residual rule applies a centered update instead:
+
+    x <- x + update_strength * (sigmoid(random_convnet(x)) - 0.5)
+
+This tests whether preserving the previous buffer image more directly helps
+avoid late-run drift without adding hand-coded image features.
+
+The optional update_output_activation setting controls the output squashing
+used before blending the random-conv update. The default sigmoid preserves the
+original IRC behavior. The tanh01 option uses (tanh(update) + 1) / 2, matching
+the scaled-tanh output used by older randomized CNN generators. Since tanh01(x)
+equals sigmoid(2x), this is a simple way to test whether a higher-gain update
+squash helps late training.
+
+The optional update_strength_after/update_strength_switch_step,
+refresh_fraction_after/refresh_fraction_switch_step, and
+reset_fraction_after/reset_fraction_switch_step settings were added to test
+whether the strong 5M CIFAR-10 checkpoint can continue improving after the
+Fourier taper by making later IRC updates gentler, changing how much of the
+buffer is recomputed, or changing how much of the buffer is reset to fresh
+noise.
+
+Control transforms
+------------------
+
+controls.py contains image transforms rather than registered pretraining
+generators:
+
+pixel_shuffle
+
+Randomly permutes pixel positions in each image while preserving each channel's
+set of pixel values. This destroys spatial layout but keeps the color/value
+histogram.
+
+patch_shuffle
+
+Splits each image into fixed-size patches and randomly permutes the patches.
+This preserves local patch content while disrupting global layout.
+
+phase_randomize
+
+Applies a Fourier transform, keeps the amplitude spectrum, randomizes the
+phase, and transforms back to image space. This preserves frequency magnitude
+statistics while destroying much of the original spatial arrangement.
