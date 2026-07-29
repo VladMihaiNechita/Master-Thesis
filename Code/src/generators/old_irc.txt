@@ -1,0 +1,44 @@
+	Initialization (20_000):
+
+_50% (10_000) independent pixel noise
+_50% (10_000) constant random RGB colors
+
+	        Steps:
+
+        1) 0.75% of images (150) are reset: _50% (75) fresh random solid color
+                                            _50% (75) fresh pixel noise
+
+        2) Random select from the buffer: _5% (1_000) source images
+                                          _5% (1_000) partners images
+        The source positions are the positions that will eventually be updated. 
+        Partners are only used by the block_crossover operation.
+
+        3) We process the selected images in chunks of 100, for each chunk:
+
+    3.1) 5% of the source images are replace: _With probability 50% with fresh random solid color
+                                              _With probability 50% with fresh pixel noise
+
+    3.2) The selected images go throgh the Spatial Program (The output is 5% (1_000) images)  
+    One random sequence of spatial operations is created per generate() call and reused for all chunks. 
+    It applies one or more operations: (crop and resize; blur; pool and resize; roll; flip; block crossover with partner images).
+    After each operation, there is a 50% chance that the program ends.
+
+3.2.1) crop and resize -> Crops a random region spanning 50-90% of the image's width and height, then bilinearly resizes it to the original size.
+3.2.2) blur -> Applies a 3x3, 5x5, or 9x9 average blur with reflection padding.
+3.2.3) pool and resize -> Average-pools by a factor of 2, 4, or 8, then bilinearly resizes to the original size.
+3.2.4) roll -> Circularly shifts the image horizontally and vertically by 12.5% or 25% in either direction.
+3.2.5) flip -> Flips the image horizontally or vertically.
+3.2.6) block crossover -> IRC mixes the source and partner using an upscaled random 7x7 mask, producing coarse rectangular blocks. 
+                       -> IRC2 instead uses a smoothed 2x2, 4x4, or 8x8 random field to produce irregular connected regions at different scales.
+
+    3.3) The result is mutated by a fresh random Residual Random Convolution
+    A new untrained CNN is randomly initialized for each generate() call and reused for all chunks:
+    change = tanh(Conv2d(16, 3)(LeakyReLU(0.2)(Conv2d(3, 16)(image - 0.5))))
+    output = clamp(image + 0.1 * change, 0, 1)
+    Both 3x3 convolutions use reflection padding, preserving the image size. Tanh and the 0.1 scale limit each channel's change to [-0.1, 0.1].
+
+    3.4) The resulting 5% (1_000) images replace the initial source images.
+
+        4) The generator returns a batch for training
+        IRC samples the buffer randomly, so images may repeat before others are sampled. 
+        IRC1 uses a shuffled order without repetition until every buffer image has been sampled, then reshuffles.
