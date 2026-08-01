@@ -1,0 +1,19 @@
+# ViT-Large + Standard Decoder
+
+image_size: 224  # Square image
+image_channels: 3
+patch_size: 16  # Square patch
+
+encoder_hidden_size: 1024
+encoder_num_heads: 16
+encoder_num_layers: 24
+encoder_mlp_ratio: 4.0
+
+decoder_hidden_size: 512
+decoder_num_heads: 16
+decoder_num_layers: 8
+decoder_mlp_ratio: 4.0
+
+norm_pix_loss: false
+
+train_batch_size: 2500
