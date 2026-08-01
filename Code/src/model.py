@@ -12,7 +12,7 @@ from .model_util import TransformerBlock, get_2d_sincos_pos_embed, random_maskin
 
 
 class VisionTransformerEncoder(nn.Module):
-    def __init__(self, config):
+    def __init__(self, config, drop_path_rate=0.0):
         super().__init__()
         patch_size = config["patch_size"]
         encoder_hidden_size = config["encoder_hidden_size"]
@@ -37,9 +37,13 @@ class VisionTransformerEncoder(nn.Module):
             self.pos_embed[:, 1:, :].copy_(patch_pos_embed)
 
         # Transformer Blocks
+        drop_path_rates = torch.linspace(
+            0, drop_path_rate, config["encoder_num_layers"]
+        ).tolist()
         self.blocks = nn.ModuleList([TransformerBlock(hidden_size=encoder_hidden_size, mlp_ratio=config["encoder_mlp_ratio"], 
-                                                      num_heads=config["encoder_num_heads"]) 
-                                     for _ in range(config["encoder_num_layers"])])
+                                                      num_heads=config["encoder_num_heads"],
+                                                      drop_path_rate=drop_path_rates[layer_index]) 
+                                     for layer_index in range(config["encoder_num_layers"])])
         self.norm = nn.LayerNorm(encoder_hidden_size, eps=1e-6)
         nn.init.constant_(self.norm.bias, 0)
         nn.init.constant_(self.norm.weight, 1.0)
@@ -259,7 +263,7 @@ class VisionTransformerClassifierHead(nn.Module):
 class FineTuningModel(nn.Module):
     def __init__(self, config, num_classes):
         super().__init__()
-        self.encoder = VisionTransformerEncoder(config)
+        self.encoder = VisionTransformerEncoder(config, drop_path_rate=0.1)
         del self.encoder.norm
 
         hidden_size = config["encoder_hidden_size"]

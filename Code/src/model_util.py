@@ -36,7 +36,8 @@ def random_masking(x, mask_ratio):
     noise = torch.rand(B, num_patches, device=x.device)
 
     ids_shuffle = torch.argsort(noise, dim=1)
-    ids_restore = torch.argsort(ids_shuffle, dim=1)
+    shuffle_positions = torch.arange(num_patches, device=x.device).expand(B, -1)
+    ids_restore = torch.empty_like(ids_shuffle).scatter_(1, ids_shuffle, shuffle_positions)
     ids_keep = ids_shuffle[:, :num_keep]
 
     x = torch.gather(input=x, dim=1, index=ids_keep.unsqueeze(-1).expand(-1, -1, hidden_size))
@@ -50,10 +51,27 @@ def random_masking(x, mask_ratio):
     return x, mask, ids_restore
 
 
+class DropPath(nn.Module):
+    def __init__(self, probability=0.0):
+        super().__init__()
+        self.probability = probability
+
+
+    def forward(self, x):
+        if self.probability == 0.0 or not self.training:
+            return x
+
+        keep_probability = 1 - self.probability
+        shape = (x.shape[0],) + (1,) * (x.ndim - 1)
+        mask = x.new_empty(shape).bernoulli_(keep_probability)
+        return x * mask / keep_probability
+
+
 class TransformerBlock(nn.Module):
-    def __init__(self, hidden_size, mlp_ratio, num_heads):
+    def __init__(self, hidden_size, mlp_ratio, num_heads, drop_path_rate=0.0):
         super().__init__()
         mlp_hidden_size = int(hidden_size * mlp_ratio)
+        self.drop_path = DropPath(drop_path_rate)
 
         # LayerNorm 1
         self.norm1 = nn.LayerNorm(hidden_size, eps=1e-6)
@@ -85,10 +103,10 @@ class TransformerBlock(nn.Module):
     def forward(self, x):
         y = self.norm1(x)  # LayerNorm
         y, _ = self.attention(y, y, y, need_weights=False)  # Multi-Head Self-Attention
-        x = x + y  # Residual connection
+        x = x + self.drop_path(y)  # Residual connection
 
         y = self.norm2(x)  # LayerNorm
         y = self.mlp(y)  # MLP block
-        x = x + y  # Residual connection
+        x = x + self.drop_path(y)  # Residual connection
 
         return x

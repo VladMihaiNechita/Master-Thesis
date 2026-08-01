@@ -126,32 +126,39 @@ class ResidualRandomConvolution(nn.Module):  # 883 Parameters
 class IRCGenerator:
     """The connected-crossover, crop-resize, and blur IRC generator."""
 
-    def __init__(self, image_size, buffer_size=20_000, source_batch_size=1_000, chunk_size=200, buffer=None):
+    def __init__(self, image_size, buffer_size=20_000, source_batch_size=1_000, chunk_size=200,
+                 buffer=None, buffer_device="cpu"):
         self.image_size = image_size
         self.buffer_size = buffer_size
         self.source_batch_size = source_batch_size
         self.chunk_size = chunk_size
         self.device = "cuda"
+        self.buffer_device = buffer_device
 
         if buffer is None:
-            self.buffer = torch.empty(buffer_size, 3, image_size, image_size, dtype=torch.uint8).random_(0, 256)
-            colors = torch.empty(buffer_size // 2, 3, 1, 1, dtype=torch.uint8).random_(0, 256)
+            self.buffer = torch.empty(buffer_size, 3, image_size, image_size,
+                                      device=buffer_device, dtype=torch.uint8).random_(0, 256)
+            colors = torch.empty(buffer_size // 2, 3, 1, 1,
+                                 device=buffer_device, dtype=torch.uint8).random_(0, 256)
             self.buffer[buffer_size // 2 :] = colors.expand(-1, -1, image_size, image_size)
         else:
-            self.buffer = buffer
+            self.buffer = buffer.to(buffer_device)
 
     def _replace_sources(self):
         reset_count = round(self.buffer_size * 0.0075)
-        reset_indices = torch.randperm(self.buffer_size)[:reset_count]
+        reset_indices = torch.randperm(self.buffer_size, device=self.buffer_device)[:reset_count]
         constant_count = reset_count // 2
 
-        colors = torch.empty(constant_count, 3, 1, 1, dtype=torch.uint8).random_(0, 256)
+        colors = torch.empty(constant_count, 3, 1, 1,
+                             device=self.buffer_device, dtype=torch.uint8).random_(0, 256)
         self.buffer[reset_indices[:constant_count]] = colors.expand(-1, -1, self.image_size, self.image_size)
         random_indices = reset_indices[constant_count:]
-        self.buffer[random_indices] = torch.empty(len(random_indices), 3, self.image_size, self.image_size, dtype=torch.uint8).random_(0, 256)
+        self.buffer[random_indices] = torch.empty(
+            len(random_indices), 3, self.image_size, self.image_size,
+            device=self.buffer_device, dtype=torch.uint8).random_(0, 256)
 
     @torch.no_grad()
-    def generate(self, batch_size):
+    def prepare_batch(self, batch_size):
         # Replace some buffer images
         self._replace_sources()
 
@@ -163,27 +170,34 @@ class IRCGenerator:
         convolution = ResidualRandomConvolution().to(self.device).eval()
         
         # Sample random indices for the source images and their partners
-        update_indices = torch.randperm(self.buffer_size)[: self.source_batch_size]
-        partner_indices = torch.randperm(self.buffer_size)[: self.source_batch_size]
+        update_indices = torch.randperm(self.buffer_size, device=self.buffer_device)[: self.source_batch_size]
+        partner_indices = torch.randperm(self.buffer_size, device=self.buffer_device)[: self.source_batch_size]
 
         for chunk_number, start in enumerate(range(0, self.source_batch_size, self.chunk_size)):
             indices = update_indices[start : start + self.chunk_size]
             partners = partner_indices[start : start + self.chunk_size]
-            # Transfer compact uint8 images before converting them on the GPU.
+            # Keep buffer images compact until converting the selected chunk on the GPU.
             images = self.buffer[indices].to(self.device).float().div_(255.0)
             second_images = self.buffer[partners].to(self.device).float().div_(255.0)
 
             # Reuse one sampled program and convolution, with fresh masks per chunk.
             images = program(images, second_images, program_seed + chunk_number)
             images = convolution(images)
-            self.buffer[indices] = images.mul(255.0).round().to(torch.uint8).cpu()
+            self.buffer[indices] = images.mul(255.0).round().to(device=self.buffer_device, dtype=torch.uint8)
 
         # Drop temporary tensors while keeping their CUDA memory available for reuse.
         del images, second_images, program, convolution
 
-        batch_indices = torch.randperm(self.buffer_size)[:batch_size]
+        return torch.randperm(self.buffer_size, device=self.buffer_device)[:batch_size]
+
+    @torch.no_grad()
+    def sample(self, batch_indices):
         return self.buffer[batch_indices].to(self.device).float().div_(255.0)
 
+    def generate(self, batch_size):
+        return self.sample(self.prepare_batch(batch_size))
+
     def sample_buffer(self):
-        indices = torch.linspace(0, self.buffer_size - 1, steps=16, dtype=torch.long)
-        return self.buffer[indices].float() / 255.0
+        indices = torch.linspace(0, self.buffer_size - 1, steps=16,
+                                 device=self.buffer_device, dtype=torch.long)
+        return (self.buffer[indices].float() / 255.0).cpu()

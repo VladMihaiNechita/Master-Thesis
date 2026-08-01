@@ -78,6 +78,8 @@ def main(config, checkpoint_path=None, run_only_one_checkpoint=False):
     generator_name = config["generator_name"]
 
     train_batch_size = config["train_batch_size"]
+    train_mini_batch_size = config["train_mini_batch_size"]
+    accumulation_steps = train_batch_size // train_mini_batch_size
     base_learning_rate = config["base_learning_rate"]
     actual_learning_rate = base_learning_rate * train_batch_size / 256
     betas = config["betas"]
@@ -102,12 +104,14 @@ def main(config, checkpoint_path=None, run_only_one_checkpoint=False):
 
     generator_object = None
     if generator_name == "irc":
+        buffer_device = config["irc_buffer_device"]
         if checkpoint_path is not None:
             generator_buffer = checkpoint["generator_buffer"]
             generator_object = IRCGenerator(config["image_size"], 
-                                            buffer_size=generator_buffer.size(0), buffer=generator_buffer)
+                                            buffer_size=generator_buffer.size(0), buffer=generator_buffer,
+                                            buffer_device=buffer_device)
         else:
-            generator_object = IRCGenerator(config["image_size"])
+            generator_object = IRCGenerator(config["image_size"], buffer_device=buffer_device)
 
     # WandB setup
     wandb.login()
@@ -150,19 +154,6 @@ def main(config, checkpoint_path=None, run_only_one_checkpoint=False):
 
     # Training loop
     for step in range(start_step, total_steps):
-        if generator_name == "gaussian_blurred_noise":
-            images = generate_gaussian_blurred_noise(train_batch_size, config["image_size"])
-        elif generator_name == "spectrum":
-            images = generate_spectrum_batch(train_batch_size, config["image_size"])
-        elif generator_name == "styleGAN-random":
-            images = generate_stylegan_random_batch(train_batch_size, config["image_size"])
-        elif generator_name == "real_video":
-            images = generate_from_real_video(train_batch_size, config["image_size"], step)
-        elif generator_name == "irc":
-            images = generator_object.generate(train_batch_size)
-        else:
-            raise ValueError(f"Unknown generator: {generator_name}")
-
         # Linearly warm up for 5% of the images, then cosine decay to zero.
         images_seen_before_step = step * train_batch_size
         if images_seen_before_step < warmup_images:
@@ -173,20 +164,42 @@ def main(config, checkpoint_path=None, run_only_one_checkpoint=False):
             learning_rate = actual_learning_rate * 0.5 * (1 + math.cos(math.pi * decay_progress))
         for parameter_group in optimizer.param_groups:
             parameter_group["lr"] = learning_rate
-        
-        with torch.autocast(device_type="cuda", dtype=torch.bfloat16):
-            loss, _, _ = compiled_model(images, train_mask_ratio)
-        loss.backward()
+
+        if generator_name == "irc":
+            irc_batch_indices = generator_object.prepare_batch(train_batch_size)
+
+        # Average the mini-batch gradients so one optimizer step still represents train_batch_size images.
+        for mini_step in range(accumulation_steps):
+            if generator_name == "gaussian_blurred_noise":
+                images = generate_gaussian_blurred_noise(train_mini_batch_size, config["image_size"])
+            elif generator_name == "spectrum":
+                images = generate_spectrum_batch(train_mini_batch_size, config["image_size"])
+            elif generator_name == "styleGAN-random":
+                images = generate_stylegan_random_batch(train_mini_batch_size, config["image_size"])
+            elif generator_name == "real_video":
+                mini_batch_index = step * accumulation_steps + mini_step
+                images = generate_from_real_video(train_mini_batch_size, config["image_size"], mini_batch_index)
+            elif generator_name == "irc":
+                mini_batch_start = mini_step * train_mini_batch_size
+                mini_batch_indices = irc_batch_indices[mini_batch_start:mini_batch_start + train_mini_batch_size]
+                images = generator_object.sample(mini_batch_indices)
+            else:
+                raise ValueError(f"Unknown generator: {generator_name}")
+
+            with torch.autocast(device_type="cuda", dtype=torch.bfloat16):
+                loss, _, _ = compiled_model(images, train_mask_ratio)
+            (loss / accumulation_steps).backward()
+            loss_sum.add_(loss.detach() / accumulation_steps)
+            del images
+
         optimizer.step()
         optimizer.zero_grad(set_to_none=True)
 
         # Average on the GPU and synchronize with the CPU only once every ten steps.
-        loss_sum.add_(loss.detach())
         if (step + 1) % 10 == 0:
             wandb.log({"train/loss": (loss_sum / 10).item(), "train/learning_rate": learning_rate,
                        "images_seen": (step + 1) * train_batch_size})
             loss_sum.zero_()
-        del images
         # log_pending_eval_results(PROJECT_ROOT, wandb.run.id)
 
         if (step + 1) % checkpoint_steps == 0:

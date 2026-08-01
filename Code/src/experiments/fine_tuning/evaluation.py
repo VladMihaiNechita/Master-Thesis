@@ -2,8 +2,9 @@ from pathlib import Path
 
 import torch
 from torch.utils.data import DataLoader
-from torchvision import datasets, transforms
+from torchvision import datasets
 
+from .data_transforms import build_evaluation_transform
 from ...model import FineTuningModel
 from ..evaluation_util import write_eval_result
 
@@ -13,7 +14,7 @@ PROJECT_ROOT = Path(__file__).resolve().parents[3]
 
 def get_dataset(image_size, dataset_name):
     test_path = PROJECT_ROOT / "datasets" / dataset_name / "test"
-    transform = transforms.Compose([transforms.Resize(256), transforms.CenterCrop(image_size), transforms.ToTensor()])
+    transform = build_evaluation_transform(image_size)
     return datasets.ImageFolder(test_path, transform=transform)
 
 
@@ -41,8 +42,7 @@ def main(checkpoint_path, batch_size):
     checkpoint = torch.load(checkpoint_path, map_location="cpu", weights_only=False)
     config = checkpoint["config"]
     dataset_name = checkpoint["dataset"]
-    # Older fine-tuning checkpoints stored the epoch only in the filename.
-    epoch = checkpoint.get("epoch", int(checkpoint_path.stem.rsplit("_epoch_", 1)[1]))
+    epoch = checkpoint["epoch"]
     wandb_run_id = checkpoint["wandb_run_id"]
 
     test_dataset = get_dataset(config["image_size"], dataset_name)

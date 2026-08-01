@@ -17,6 +17,10 @@ from src.experiments.fine_tuning.main import main as fine_tune_main
 from src.experiments.fine_tuning.evaluation import main as fine_tune_evaluate
 
 
+size = "base"  # tiny, small, base, large
+run_only_one_checkpoint = False
+fine_tuning_dataset = "imagenet1k-simclr-10pct" # imagenet100-cmc, imagenet1k-simclr-10pct
+
 def main():
         set_seed()
         start_time = time.time()
@@ -39,15 +43,15 @@ def main():
             checkpoint_path = None
         
         if mode == "pretraining_main":
-            config_path = PROJECT_ROOT / "src" / "experiments" / "pretraining" / "configs" / "tiny_pretraining_main.yaml"
+            config_path = PROJECT_ROOT / "src" / "experiments" / "pretraining" / "configs" / f"{size}_pretraining_main.yaml"
             config = load_config(config_path)
-            pretrain(config, checkpoint_path=checkpoint_path, run_only_one_checkpoint=False)
+            pretrain(config, checkpoint_path=checkpoint_path, run_only_one_checkpoint=run_only_one_checkpoint)
 
         elif mode == "pretraining_evaluation":
             if checkpoint_path is None:
                 parser.error("--checkpoint_path is required for evaluation")
         
-            config_path = PROJECT_ROOT / "src" / "experiments" / "pretraining" / "configs" / "tiny_pretraining_evaluation.yaml"
+            config_path = PROJECT_ROOT / "src" / "experiments" / "pretraining" / "configs" / f"{size}_pretraining_evaluation.yaml"
             config = load_config(config_path)
 
             datasets_to_evaluate = config["datasets_to_evaluate"]
@@ -76,16 +80,16 @@ def main():
                     checkpoint_path.unlink()
 
         elif mode == "fine_tuning_main":
-            config_path = PROJECT_ROOT / "src" / "experiments" / "fine_tuning" / "configs" / "tiny_fine_tuning_main.yaml"
+            config_path = PROJECT_ROOT / "src" / "experiments" / "fine_tuning" / "configs" / f"{size}_fine_tuning_main.yaml"
             fine_tune_main(fine_tuning_config=load_config(config_path),
                            fine_tuning_checkpoint_path=checkpoint_path,
-                           dataset="imagenet100-cmc", run_only_one_checkpoint=True)
+                           dataset=fine_tuning_dataset, run_only_one_checkpoint=run_only_one_checkpoint)
 
         elif mode == "fine_tuning_evaluation":
             if checkpoint_path is None:
                 parser.error("--checkpoint_path is required for evaluation")
 
-            config_path = PROJECT_ROOT / "src" / "experiments" / "fine_tuning" / "configs" / "tiny_fine_tuning_evaluation.yaml"
+            config_path = PROJECT_ROOT / "src" / "experiments" / "fine_tuning" / "configs" / f"{size}_fine_tuning_evaluation.yaml"
             config = load_config(config_path)
             fine_tune_evaluate(checkpoint_path, config["batch_size"])
 
