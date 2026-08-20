@@ -5,12 +5,12 @@ import torch
 from torch.utils.data import DataLoader, TensorDataset
 from torchvision import datasets, transforms
 
-from ...util import set_seed
-from ..evaluation_util import write_eval_result
-from ...model import MaskedAutoencoderViT, VisionTransformerClassifierHead
+from ....util import set_seed
+from ...evaluation_util import write_eval_result
+from ....models import MaskedAutoencoderViT, VisionTransformerClassifierHead
 
 
-PROJECT_ROOT = Path(__file__).resolve().parents[3]
+PROJECT_ROOT = Path(__file__).resolve().parents[4]
 
 
 def start_cuda_timer():

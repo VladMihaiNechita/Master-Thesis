@@ -5,11 +5,11 @@ from torch.utils.data import DataLoader
 from torchvision import datasets
 
 from .data_transforms import build_evaluation_transform
-from ...model import FineTuningModel
-from ..evaluation_util import write_eval_result
+from ....models import FineTuningModel
+from ...evaluation_util import write_eval_result
 
 
-PROJECT_ROOT = Path(__file__).resolve().parents[3]
+PROJECT_ROOT = Path(__file__).resolve().parents[4]
 
 
 def get_dataset(image_size, dataset_name):

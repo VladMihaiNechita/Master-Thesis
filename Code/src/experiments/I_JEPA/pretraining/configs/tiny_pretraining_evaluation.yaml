@@ -1,0 +1,26 @@
+# eval_validation, eval_test
+metric_group: eval_validation
+result_suffix: _all_validation_datasets
+
+validation_datasets: &validation_datasets ["cifar10", "dtd", "eurosat", "food101", "pets", "tiny-imagenet-200", "line-field-orientation", "shape-color-objects", "texture-mosaic"]
+test_datasets: &test_datasets ["cifar100", "resisc45", "stanford-cars", "sun397-partition1"]
+datasets_to_evaluate: *validation_datasets
+
+delete_checkpoints_after_evaluation: True
+
+feature_batch_size_cifar10: 128
+feature_batch_size_cifar100: 128
+feature_batch_size_dtd: 128
+feature_batch_size_eurosat: 128
+feature_batch_size_food101: 192
+feature_batch_size_pets: 192
+feature_batch_size_resisc45: 128
+feature_batch_size_stanford_cars: 128
+feature_batch_size_sun397_partition1: 256
+feature_batch_size_tiny_imagenet_200: 128
+feature_batch_size_line_field_orientation: 128
+feature_batch_size_shape_color_objects: 128
+feature_batch_size_texture_mosaic: 128
+
+# BatchNorm rejects a one-sample batch, so the last batch should be larger than one.
+linear_probe_batch_size: 256

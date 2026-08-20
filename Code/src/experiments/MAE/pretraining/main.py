@@ -9,15 +9,16 @@ import wandb
 from torchvision.utils import make_grid
 
 # from ..evaluation_util import log_pending_eval_results
-from ...generators.gaussian_blurred_noise import generate_gaussian_blurred_noise
-from ...generators.irc import IRCGenerator
-from ...generators.real_video import generate_from_real_video
-from ...generators.spectrum import generate_spectrum_batch
-from ...generators.styleGAN_random import generate_stylegan_random_batch
-from ...model import MaskedAutoencoderViT
+from ....generators.gaussian_blurred_noise import generate_gaussian_blurred_noise
+from ....generators.irc import IRCGenerator
+from ....generators.irc_new import IRCGenerator as IRCNewGenerator
+from ....generators.real_video import generate_from_real_video
+from ....generators.spectrum import generate_spectrum_batch
+from ....generators.styleGAN_random import generate_stylegan_random_batch
+from ....models import MaskedAutoencoderViT
 
 
-PROJECT_ROOT = Path(__file__).resolve().parents[3]
+PROJECT_ROOT = Path(__file__).resolve().parents[4]
 CHECKPOINTS_DIR = PROJECT_ROOT / "checkpoints"
 CHECKPOINTS_DIR.mkdir(exist_ok=True)
 
@@ -40,6 +41,7 @@ def save_checkpoint(model, optimizer, generator_name, generator_object, config,
     resume_checkpoint = {
         "optimizer": optimizer.state_dict(),
         "generator_buffer": generator_object.buffer if generator_object is not None else None,
+        "generator_depths": getattr(generator_object, "depths", None),
         "step": step,
         "python_random_state": random.getstate(),
         "numpy_random_state": np.random.get_state(),
@@ -59,7 +61,16 @@ def save_checkpoint(model, optimizer, generator_name, generator_object, config,
 
     # Show generator images
     if generator_object is not None:
-        buffer_grid = make_grid(generator_object.sample_buffer(), nrow=4)
+        with torch.random.fork_rng():
+            if hasattr(generator_object, "depths"):
+                batch_indices = generator_object.sample_indices(
+                    config["train_batch_size"], min_depth=generator_object.min_depth)
+            else:
+                batch_indices = torch.randperm(
+                    generator_object.buffer_size, device=generator_object.buffer_device
+                )[:config["train_batch_size"]]
+            checkpoint_images = generator_object.sample(batch_indices[:100]).cpu()
+        buffer_grid = make_grid(checkpoint_images, nrow=10)
         wandb.log({"images/buffer": wandb.Image(buffer_grid), "images_seen": images_seen})
 
 
@@ -103,15 +114,21 @@ def main(config, checkpoint_path=None, run_only_one_checkpoint=False):
     compiled_model = torch.compile(model)
 
     generator_object = None
-    if generator_name == "irc":
+    if generator_name in ["irc", "irc_new"]:
         buffer_device = config["irc_buffer_device"]
+        generator_class = IRCGenerator if generator_name == "irc" else IRCNewGenerator
         if checkpoint_path is not None:
             generator_buffer = checkpoint["generator_buffer"]
-            generator_object = IRCGenerator(config["image_size"], 
-                                            buffer_size=generator_buffer.size(0), buffer=generator_buffer,
-                                            buffer_device=buffer_device)
+            generator_arguments = {
+                "buffer_size": generator_buffer.size(0),
+                "buffer": generator_buffer,
+                "buffer_device": buffer_device,
+            }
+            if generator_name == "irc_new":
+                generator_arguments["depths"] = checkpoint.get("generator_depths")
+            generator_object = generator_class(config["image_size"], **generator_arguments)
         else:
-            generator_object = IRCGenerator(config["image_size"], buffer_device=buffer_device)
+            generator_object = generator_class(config["image_size"], buffer_device=buffer_device)
 
     # WandB setup
     wandb.login()
@@ -165,7 +182,7 @@ def main(config, checkpoint_path=None, run_only_one_checkpoint=False):
         for parameter_group in optimizer.param_groups:
             parameter_group["lr"] = learning_rate
 
-        if generator_name == "irc":
+        if generator_name in ["irc", "irc_new"]:
             irc_batch_indices = generator_object.prepare_batch(train_batch_size)
 
         # Average the mini-batch gradients so one optimizer step still represents train_batch_size images.
@@ -179,7 +196,7 @@ def main(config, checkpoint_path=None, run_only_one_checkpoint=False):
             elif generator_name == "real_video":
                 mini_batch_index = step * accumulation_steps + mini_step
                 images = generate_from_real_video(train_mini_batch_size, config["image_size"], mini_batch_index)
-            elif generator_name == "irc":
+            elif generator_name in ["irc", "irc_new"]:
                 mini_batch_start = mini_step * train_mini_batch_size
                 mini_batch_indices = irc_batch_indices[mini_batch_start:mini_batch_start + train_mini_batch_size]
                 images = generator_object.sample(mini_batch_indices)

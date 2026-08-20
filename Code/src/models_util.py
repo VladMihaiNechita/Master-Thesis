@@ -51,6 +51,19 @@ def random_masking(x, mask_ratio):
     return x, mask, ids_restore
 
 
+def apply_masks(x, masks):
+    # x: [B, num_patches, hidden_size]
+    if not isinstance(masks, list):
+        masks = [masks]
+
+    selected = []
+    for mask in masks:
+        indices = mask.unsqueeze(-1).expand(-1, -1, x.shape[-1])
+        selected.append(torch.gather(x, dim=1, index=indices))
+
+    return torch.cat(selected, dim=0)
+
+
 class DropPath(nn.Module):
     def __init__(self, probability=0.0):
         super().__init__()

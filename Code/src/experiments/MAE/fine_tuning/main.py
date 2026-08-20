@@ -12,10 +12,10 @@ from torch.utils.data import DataLoader
 from torchvision.datasets import ImageFolder
 
 from .data_transforms import (IMAGENET_MEAN, IMAGENET_STD, BatchMixupCutmix, DeiTRandomErasing, build_training_transform)
-from ...model import FineTuningModel
+from ....models import FineTuningModel
 
 
-PROJECT_ROOT = Path(__file__).resolve().parents[3]
+PROJECT_ROOT = Path(__file__).resolve().parents[4]
 CHECKPOINTS_DIR = PROJECT_ROOT / "checkpoints"
 CHECKPOINTS_DIR.mkdir(exist_ok=True)
 

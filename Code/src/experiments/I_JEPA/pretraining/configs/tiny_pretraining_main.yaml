@@ -1,0 +1,42 @@
+# ViT-Tiny
+size: tiny
+
+image_size: 224
+image_channels: 3
+patch_size: 16
+
+encoder_hidden_size: 192
+encoder_num_heads: 3
+encoder_num_layers: 12
+encoder_mlp_ratio: 4.0
+
+predictor_hidden_size: 128
+predictor_num_heads: 4
+predictor_num_layers: 6
+predictor_mlp_ratio: 4.0
+
+# I-JEPA multi-block masking
+context_mask_scale: [0.85, 1.0]
+target_mask_scale: [0.15, 0.2]
+target_aspect_ratio: [0.75, 1.5]
+num_target_blocks: 4
+min_context_patches: 10
+allow_full_grid_blocks: false
+
+# Training
+train_batch_size: 4002
+train_mini_batch_size: 1334
+start_learning_rate: 2.0e-4
+peak_learning_rate: 1.0e-3
+final_learning_rate: 1.0e-6
+betas: [0.9, 0.999]
+weight_decay: 0.04
+final_weight_decay: 0.4
+warmup_fraction: 0.05
+ema: [0.992, 1.0]
+
+# gaussian_blurred_noise, spectrum, styleGAN-random, real_video, irc, irc_new
+generator_name: irc_new
+irc_buffer_device: cuda
+number_of_pretraining_images: 100050000
+checkpoint_every: 4002000

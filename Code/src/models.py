@@ -1,7 +1,11 @@
+import copy
+import math
+
 import torch
 import torch.nn as nn
+import torch.nn.functional as F
 
-from .model_util import TransformerBlock, get_2d_sincos_pos_embed, random_masking
+from .models_util import TransformerBlock, apply_masks, get_2d_sincos_pos_embed, random_masking
 
 
 # B - Batch size
@@ -294,3 +298,154 @@ class FineTuningModel(nn.Module):
         #x = x[:, 0]  # CLS token
         x = x[:, 1:].mean(dim=1)  # Mean of all tokens
         return self.head(self.norm(x))
+
+
+def initialize_ijepa_weights(module):
+    if isinstance(module, (nn.Linear, nn.Conv2d)):
+        nn.init.trunc_normal_(module.weight, std=0.02)
+        if module.bias is not None:
+            nn.init.zeros_(module.bias)
+    elif isinstance(module, nn.MultiheadAttention):
+        nn.init.trunc_normal_(module.in_proj_weight, std=0.02)
+        nn.init.zeros_(module.in_proj_bias)
+    elif isinstance(module, nn.LayerNorm):
+        nn.init.zeros_(module.bias)
+        nn.init.ones_(module.weight)
+
+
+def rescale_ijepa_residual_weights(blocks):
+    with torch.no_grad():
+        for layer_index, block in enumerate(blocks, start=1):
+            scale = math.sqrt(2.0 * layer_index)
+            block.attention.out_proj.weight.div_(scale)
+            block.mlp[2].weight.div_(scale)
+
+
+class IJEPAEncoder(nn.Module):
+    def __init__(self, config, drop_path_rate=0.0):
+        super().__init__()
+
+        hidden_size = config["encoder_hidden_size"]
+        grid_size = config["image_size"] // config["patch_size"]
+        num_patches = grid_size ** 2
+
+        self.projection = nn.Conv2d(config["image_channels"], hidden_size, kernel_size=config["patch_size"], stride=config["patch_size"])
+
+        self.pos_embed = nn.Parameter(torch.zeros(1, num_patches, hidden_size), requires_grad=False)
+
+        with torch.no_grad():
+            self.pos_embed.copy_(get_2d_sincos_pos_embed(grid_size, hidden_size))
+
+        drop_path_rates = torch.linspace(
+            0, drop_path_rate, config["encoder_num_layers"]
+        ).tolist()
+        self.blocks = nn.ModuleList([TransformerBlock(hidden_size=hidden_size,
+                                                      mlp_ratio=config["encoder_mlp_ratio"],
+                                                      num_heads=config["encoder_num_heads"],
+                                                      drop_path_rate=drop_path_rates[layer_index])
+                                    for layer_index in range(config["encoder_num_layers"])])
+        self.norm = nn.LayerNorm(hidden_size, eps=1e-6)
+        nn.init.constant_(self.norm.bias, 0)
+        nn.init.constant_(self.norm.weight, 1.0)
+
+        self.apply(initialize_ijepa_weights)
+        rescale_ijepa_residual_weights(self.blocks)
+
+    def forward(self, images, patch_indices=None):
+        x = self.projection(images).flatten(2).transpose(1, 2)
+        x = x + self.pos_embed
+
+        if patch_indices is not None:
+            x = apply_masks(x, patch_indices)
+
+        for block in self.blocks:
+            x = block(x)
+
+        return self.norm(x)
+
+
+class IJEPAFineTuningModel(nn.Module):
+    def __init__(self, config, num_classes):
+        super().__init__()
+        self.encoder = IJEPAEncoder(config, drop_path_rate=0.1)
+
+        hidden_size = config["encoder_hidden_size"]
+        self.head = nn.Linear(hidden_size, num_classes)
+        nn.init.trunc_normal_(self.head.weight, std=2e-5)
+        nn.init.constant_(self.head.bias, 0)
+
+    def forward(self, images):
+        # I-JEPA has no CLS token, so classify the mean of all patch tokens.
+        x = self.encoder(images).mean(dim=1)
+        return self.head(x)
+
+
+class IJEPAPredictor(nn.Module):
+    def __init__(self, config):
+        super().__init__()
+        encoder_hidden_size = config["encoder_hidden_size"]
+        predictor_hidden_size = config["predictor_hidden_size"]
+        grid_size = config["image_size"] // config["patch_size"]
+        num_patches = grid_size ** 2
+
+        self.input_projection = nn.Linear(encoder_hidden_size, predictor_hidden_size)
+
+        self.mask_token = nn.Parameter(torch.zeros(1, 1, predictor_hidden_size))
+        nn.init.trunc_normal_(self.mask_token, std=0.02)
+
+        self.pos_embed = nn.Parameter(torch.zeros(1, num_patches, predictor_hidden_size), requires_grad=False)
+        with torch.no_grad():
+            self.pos_embed.copy_(get_2d_sincos_pos_embed(grid_size, predictor_hidden_size))
+
+        self.blocks = nn.ModuleList([TransformerBlock(hidden_size=predictor_hidden_size,
+                                                      mlp_ratio=config["predictor_mlp_ratio"],
+                                                      num_heads=config["predictor_num_heads"])
+                                     for _ in range(config["predictor_num_layers"])])
+        self.norm = nn.LayerNorm(predictor_hidden_size, eps=1e-6)
+        nn.init.constant_(self.norm.bias, 0)
+        nn.init.constant_(self.norm.weight, 1.0)
+
+        self.output_projection = nn.Linear(predictor_hidden_size, encoder_hidden_size)
+
+        self.apply(initialize_ijepa_weights)
+        rescale_ijepa_residual_weights(self.blocks)
+
+    def forward(self, context_features, context_indices, target_indices):
+        batch_size = context_features.shape[0]
+        context_length = context_features.shape[1]
+
+        x = self.input_projection(context_features)
+        positions = self.pos_embed.expand(batch_size, -1, -1)
+        x = x + apply_masks(positions, context_indices)
+
+        target_positions = apply_masks(positions, target_indices)
+        target_tokens = self.mask_token.expand_as(target_positions) + target_positions
+
+        # Pair the same context representation with every target block.
+        x = x.repeat(len(target_indices), 1, 1)
+        x = torch.cat([x, target_tokens], dim=1)
+        for block in self.blocks:
+            x = block(x)
+
+        x = self.norm(x)
+        return self.output_projection(x[:, context_length:])
+
+
+class IJEPA(nn.Module):
+    def __init__(self, config):
+        super().__init__()
+        self.encoder = IJEPAEncoder(config)
+        self.target_encoder = copy.deepcopy(self.encoder)
+        self.target_encoder.requires_grad_(False)
+        self.predictor = IJEPAPredictor(config)
+
+    def forward(self, images, context_indices, target_indices):
+        with torch.no_grad():
+            # Targets are selected after encoding the complete image.
+            targets = self.target_encoder(images)
+            targets = F.layer_norm(targets, (targets.shape[-1],))
+            targets = apply_masks(targets, target_indices)
+
+        context_features = self.encoder(images, context_indices)
+        predictions = self.predictor(context_features, context_indices, target_indices)
+        return predictions, targets

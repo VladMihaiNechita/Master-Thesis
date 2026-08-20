@@ -1,0 +1,12 @@
+#pretraining_checkpoint_path: ijepa_model_tiny_generator_irc_new_images_seen_0.pth
+pretraining_checkpoint_path: ijepa_model_tiny_generator_irc_new_images_seen_100050000.pth
+
+fine_tuning_epochs: 300
+checkpoint_every_n_epochs: 5
+fine_tuning_warmup_epochs: 5
+
+fine_tuning_train_batch_size: 1024
+fine_tuning_base_learning_rate: 2.5e-4
+fine_tuning_min_learning_rate: 5.0e-5
+
+fine_tuning_layer_decay: 0.95
