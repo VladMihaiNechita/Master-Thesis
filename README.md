@@ -1,7 +1,7 @@
 # Universal Pretraining for Images
 
 MAE is the active experiment. The I-JEPA ViT-Tiny experiment is frozen for possible
-future use; its commands and artifact references are in the
+future use; its setup and run commands are in the
 [I-JEPA README](src/experiments/I_JEPA/README.md). The `ijepa-final` Git tag preserves
 the complete source snapshot, including shared model and generator code.
 

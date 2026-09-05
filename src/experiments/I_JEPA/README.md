@@ -17,15 +17,11 @@ four target blocks, a global batch of 4,002 (microbatch 1,334), 100,050,000 imag
 and checkpoints every 4,002,000 images. Fine-tuning uses 300 epochs, batch 1,024,
 and layer decay 1.0. The YAMLs are the full configuration reference.
 
-These describe the frozen code defaults. Historical runs must be interpreted
-using the `config` and `fine_tuning_config` stored in their checkpoints/W&B;
-their exact code/config correspondence was not independently verified at freeze.
-
 ## Run and resume
 
 Use the project virtual environment from the repository root, with the setup and
 dataset layout described in the root README. Checkpoint paths below are relative
-to `checkpoints/`; substitute actual filenames when needed.
+to `checkpoints/`; the example files are created by rerunning the pipeline.
 
 ```sh
 python -B src/run.py --experiment=I_JEPA --mode=pretraining_main
@@ -45,32 +41,6 @@ Linear-probe evaluation uses the validation dataset list by default. Select
 `pretraining/configs/tiny_pretraining_evaluation.yaml` for the held-out dataset list.
 Set `delete_checkpoints_after_evaluation: false` when evaluating checkpoints you
 want to keep beyond the automatically retained initial/final checkpoints.
-
-## Artifact references
-
-Known DAS-6 project location:
-`/var/scratch/gkl505/Universal Pretraining for Images`.
-Weights/resume files belong in `checkpoints/`; metrics are in `eval_results/` and
-`eval_results_logged/`. W&B project: `universal-pretraining-for-images`.
-
-Keep the initial and final `ijepa_model_tiny_generator_irc_new_images_seen_*.pth`
-files (0 and 100050000), the final pretraining `_resume.pth`, the epoch-300
-fine-tuned weights and any needed resume files, and the corresponding evaluation
-JSONs. Weights and results are not included in Git.
-
-The existing local monitor records these fine-tuning run IDs:
-
-| Dataset | Pretraining images | W&B run ID |
-| --- | ---: | --- |
-| imagenet100-cmc | 0 | wzc9srl9 |
-| imagenet1k-simclr-10pct | 0 | jsa4wfwi |
-| imagenet100-cmc | 100050000 | n09hayi4 |
-| imagenet1k-simclr-10pct | 100050000 | xj3luvjz |
-
-The pretraining W&B run ID is stored in its checkpoint's `wandb_run_id` field.
-Remote artifact presence, backups, and run results could not be checked during
-finalization on 2026-09-05 because DAS-6 authentication failed. These are recorded
-locations and identifiers, not a verified backup manifest.
 
 ## Scope and verification
 
