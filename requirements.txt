@@ -1,0 +1,9 @@
+# Versions captured from the project virtual environment at the I-JEPA freeze.
+# Install the CUDA builds of torch/torchvision separately; see README.md.
+torch==2.12.1
+torchvision==0.27.1
+numpy==2.4.4
+PyYAML==6.0.3
+wandb==0.28.0
+opencv-python==5.0.0.93
+paramiko==5.0.0

@@ -3,7 +3,7 @@ from pathlib import Path
 
 
 def write_eval_result(project_root, checkpoint_path, step, metrics, wandb_run_id,
-                      result_suffix="", step_name="images_seen"):
+                      result_suffix="", step_name="images_seen", complete=True):
     results_dir = Path(project_root) / "eval_results"
     results_dir.mkdir(exist_ok=True)
 
@@ -12,6 +12,7 @@ def write_eval_result(project_root, checkpoint_path, step, metrics, wandb_run_id
         "checkpoint": Path(checkpoint_path).name,
         "wandb_run_id": wandb_run_id,
         "metrics": metrics,
+        "complete": complete,
     }
 
     # This is an atomic-write pattern
@@ -35,6 +36,8 @@ def log_pending_eval_results(project_root, wandb_run_id):
     for result_path in results_dir.glob("*.json"):
         with result_path.open("r") as f:
             result = json.load(f)
+        if not result.get("complete", True):
+            continue
         if result["wandb_run_id"] != wandb_run_id:
             continue
         step_name = "epoch" if "epoch" in result else "images_seen"
@@ -54,6 +57,8 @@ def log_all_pending_eval_results_to_wandb(project_root):
     for result_path in results_dir.glob("*.json"):
         with result_path.open("r") as f:
             result = json.load(f)
+        if not result.get("complete", True):
+            continue
         step_name = "epoch" if "epoch" in result else "images_seen"
         wandb_runs[result["wandb_run_id"]] = step_name
 

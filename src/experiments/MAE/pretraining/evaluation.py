@@ -240,5 +240,6 @@ def main(checkpoint_path, datasets_to_evaluate,
                                                    reconstruction_batch_sizes, feature_batch_sizes, linear_probe_batch_size,
                                                    metric_group=metric_group):
         start_time = perf_counter()
-        write_eval_result(PROJECT_ROOT, checkpoint_path, images_seen, metrics, wandb_run_id, result_suffix=result_suffix)
+        write_eval_result(PROJECT_ROOT, checkpoint_path, images_seen, metrics, wandb_run_id,
+                          result_suffix=result_suffix, complete=dataset_name == datasets_to_evaluate[-1])
         print(f"Timing: dataset={dataset_name} result_write={perf_counter() - start_time:.2f}s", flush=True)
