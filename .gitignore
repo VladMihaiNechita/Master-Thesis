@@ -5,12 +5,7 @@ datasets/
 checkpoints/
 Generator_Images/
 Papers/
-Z_DAS-6/*
-!Z_DAS-6/main.py
-!Z_DAS-6/small_scripts.py
-!Z_DAS-6/sync_on_wandb.py
-!Z_DAS-6/util.py
-!Z_DAS-6/README.md
+Z_DAS-6/
 wandb/
 eval_results/
 eval_results_logged/
